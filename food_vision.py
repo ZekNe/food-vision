@@ -1,52 +1,41 @@
-import cv2 as cv
 import torch
-import os
+import cv2
 
-def process_frame(frame):
-    # Convert BGR to RGB
-    frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+model = torch.hub.load("ultralytics/yolov5", "yolov5s")
 
-    # Convert to PyTorch tensor and normalize to [0,1], (H, W, C) -> (C, H, W)
-    tensor_frame = torch.tensor(frame, dtype=torch.float32).permute(2, 0, 1) / 255.0
-
-    return tensor_frame
-
-os.makedirs("saved_frames", exist_ok=True)
-
-cap = cv.VideoCapture(0)
+cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
     print("Error: Could not open webcam")
     exit()
 
-frame_count = 0
-
 while True:
-    ret, frame =cap.read()
+    ret, frame = cap.read()
 
     if not ret:
         print("Error: Failed to grab frame")
         break
 
-    tensor_frame = process_frame(frame)
 
-    # Save regular frame
-    cv.imwrite(f"saved_frames/regular_frame_{frame_count}.jpg", frame)
+    results = model(frame)
 
-    # Save tensor frame
-    torch.save(tensor_frame, f"saved_frames/tensor_frame_{frame_count}.pt")
+    labels, cords = results.names, results.xywh[0]
 
-    frame_count += 1
-    
-    # Convert tensors back to RGB 
-    frame_rgb = tensor_frame.permute(1, 2, 0).numpy()
-    frame_bgr = cv.cvtColor(frame_rgb, cv.COLOR_RGB2BGR)
+    for *xywh, conf, cls in cords:
+        x1, y1, x2, y2 = map(int, xywh)
+        label = labels[int(cls)]
+        confidence = conf.item()
+        color = (0, 255, 0)
 
-    # Show live feed
-    cv.imshow("Live Feed", frame_rgb)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
-    if cv.waitKey(1) & 0xFF == ord("q"):
+        cv2.putText(frame, f"{label} {confidence:.2f}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+
+
+    cv2.imshow("Webcam", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
-cv.destroyAllWindows()
+cv2.destroyAllWindows
